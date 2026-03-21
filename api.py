@@ -12,6 +12,10 @@ from m2.entry_detector import detect_entry_point
 from main import run_m3_pipeline
 from github_fetcher import fetch_repo_files
 
+from fastapi.responses import Response
+from b3.repo_summarizer import generate_summary
+from b3.report_generator import generate_report
+
 app = FastAPI(title="Codebase Intelligence Agent — M1, M2, M3")
 
 app.add_middleware(
@@ -116,16 +120,30 @@ async def _run_full_pipeline(github_url: str) -> dict:
         language      = language,
     )
 
-    # ── Assemble the combined response ────────────────────────────────────────
-    # Nested under feature keys so the frontend can destructure cleanly:
-    # const { m1, m2, m3 } = await response.json()
-    # Each feature's data is exactly what its individual endpoint returned,
-    # so the frontend doesn't need to change how it reads any specific field.
+    # ── Step 8: Generate B3 intelligent summary ───────────────────────────────
+    # Runs after M1, M2, M3 are all complete so it has full context to
+    # synthesise. One Gemini call producing the paragraph that appears
+    # at the top of the UI and as the executive summary in the PDF report.
+    print("\n" + "=" * 60)
+    print("B3: Generating intelligent repository summary")
+    print("=" * 60)
+
+    b3_summary = generate_summary(
+        repo_url  = github_url,
+        m1_result = m1_result,
+        m2_result = m2_result,
+        m3_result = m3_result,
+    )
+    print(f"  Summary: {b3_summary[:80]}...")
+
     return {
         "repository": {
             "url":          github_url,
             "total_files":  graph_stats["total_files"],
             "language":     language,
+        },
+        "b3": {
+            "summary": b3_summary,
         },
         "m1": m1_result,
         "m2": m2_result,
@@ -218,5 +236,57 @@ async def analyse_m3(request: AnalyseRequest):
         return run_m3_pipeline(file_contents)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ReportRequest(BaseModel):
+    """
+    The frontend sends back the analysis data it already has in memory.
+    The server has no session state — it receives everything it needs
+    to generate the report in a single self-contained request.
+    """
+    repo_url:   str
+    b3_summary: str
+    m1_result:  dict
+    m2_result:  dict
+    m3_result:  dict
+
+
+@app.post("/report")
+async def download_report(request: ReportRequest):
+    """
+    Generate and return a downloadable PDF analysis report.
+
+    The frontend calls this endpoint after receiving the /analyse response,
+    passing back the stored analysis data. The server generates the PDF
+    in memory and returns it as a file download with the appropriate headers.
+
+    The Content-Disposition header with attachment tells the browser to
+    download the file rather than trying to display it inline.
+    The filename includes the repo name so the developer knows what
+    they downloaded without opening it.
+    """
+    try:
+        pdf_bytes = generate_report(
+            repo_url   = request.repo_url,
+            b3_summary = request.b3_summary,
+            m1_result  = request.m1_result,
+            m2_result  = request.m2_result,
+            m3_result  = request.m3_result,
+        )
+
+        # Extract a clean filename from the repo URL
+        # "https://github.com/expressjs/express" → "express_analysis.pdf"
+        repo_name = request.repo_url.rstrip("/").split("/")[-1]
+        filename  = f"{repo_name}_codebase_analysis.pdf"
+
+        return Response(
+            content     = pdf_bytes,
+            media_type  = "application/pdf",
+            headers     = {
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length":      str(len(pdf_bytes)),
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

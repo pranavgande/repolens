@@ -74,7 +74,7 @@ def _build_chain_gemini():
         )
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-3-flash-preview",
         google_api_key=api_key,
         # temperature=0 makes the output maximally deterministic.
         # For a one-sentence description, you want consistency —
