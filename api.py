@@ -3,6 +3,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from graph.builder import build_dependency_graph
+from m2.m2_pipeline import run_m2_pipeline
 
 # Import your existing pipeline function — nothing in the pipeline changes
 from main import run_m3_pipeline
@@ -68,3 +70,12 @@ async def health_check():
 async def health_check():
     """Simple endpoint to verify the server is running."""
     return {"status": "ok"}
+
+@app.post("/analyse/m2")
+async def analyse_m2(request: AnalyseRequest):
+    try:
+        graph  = build_dependency_graph(MOCK_REPO_FILES)
+        result = run_m2_pipeline(MOCK_REPO_FILES, graph)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
