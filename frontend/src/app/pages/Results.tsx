@@ -120,8 +120,8 @@ export function Results() {
                         <BookOpen className="w-6 h-6 text-white" />
                       </div>
                       <div className="flex-1">
-                        <CardTitle className="text-2xl">Executive Summary (B3)</CardTitle>
-                        <CardDescription>Synthesized repository Intelligence combining M1, M2, and M3</CardDescription>
+                        <CardTitle className="text-2xl">Executive Summary</CardTitle>
+                        <CardDescription>Synthesized repository Intelligence combining structure, flow, and maps</CardDescription>
                       </div>
                     </div>
                   </CardHeader>
@@ -162,7 +162,7 @@ export function Results() {
                       <div className="flex items-start gap-4">
                         <div className="p-3 bg-primary rounded-xl"><FolderTree className="w-6 h-6 text-white" /></div>
                         <div>
-                          <CardTitle className="text-2xl">Module Analysis (M1)</CardTitle>
+                          <CardTitle className="text-2xl">Module Analysis</CardTitle>
                           <CardDescription>Intelligent folder explanations via pattern matching & AI</CardDescription>
                         </div>
                       </div>
@@ -207,7 +207,7 @@ export function Results() {
                     <div className="flex items-start gap-4">
                       <div className="p-3 bg-primary rounded-xl"><Zap className="w-6 h-6 text-white" /></div>
                       <div>
-                        <CardTitle className="text-2xl">Entry Point (M2)</CardTitle>
+                        <CardTitle className="text-2xl">Entry Point Detection</CardTitle>
                         <CardDescription>Primary execution file and graph-derived boundaries</CardDescription>
                       </div>
                     </div>
@@ -243,7 +243,7 @@ export function Results() {
                     <div className="flex items-start gap-4">
                       <div className="p-3 bg-primary rounded-xl"><GitBranch className="w-6 h-6 text-white" /></div>
                       <div>
-                        <CardTitle className="text-2xl">Codebase Map Canvas (M3)</CardTitle>
+                        <CardTitle className="text-2xl">Codebase Map Canvas</CardTitle>
                         <CardDescription>Interactive dependency graph algorithmically auto-placed</CardDescription>
                       </div>
                     </div>
@@ -270,7 +270,7 @@ export function Results() {
                         <Star className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <CardTitle className="text-2xl">Critical Infrastructure (B1)</CardTitle>
+                        <CardTitle className="text-2xl">Critical Infrastructure</CardTitle>
                         <CardDescription>Files forming the backbone of the architecture</CardDescription>
                       </div>
                     </div>
@@ -289,7 +289,7 @@ export function Results() {
               </motion.div>
             </TabsContent>
 
-            {/* B2: Exec Flow (Gemini Analysis) */}
+            {/* Exec Flow (Gemini Analysis) */}
             <TabsContent value="b2" className="space-y-4">
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <Card className="border-border/50">
@@ -299,7 +299,7 @@ export function Results() {
                         <TrendingUp className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <CardTitle className="text-2xl">Intelligent Execution Mechanics (B2)</CardTitle>
+                        <CardTitle className="text-2xl">Intelligent Execution Mechanics</CardTitle>
                         <CardDescription>AI-generated breakdown of the app lifecycle</CardDescription>
                       </div>
                     </div>

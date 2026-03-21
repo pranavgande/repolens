@@ -9,7 +9,7 @@ const steps = [
   { icon: FolderTree, label: 'Fetching repository & scanning tree', duration: 1500 },
   { icon: Code2, label: 'Building dependency graph', duration: 1800 },
   { icon: GitBranch, label: 'Detecting entry point & mapping files', duration: 2000 },
-  { icon: Zap, label: 'Generating B3 AI summary & PDF', duration: 1200 },
+  { icon: Zap, label: 'Generating intelligent summary & PDF', duration: 1200 },
 ];
 
 export function Processing() {
