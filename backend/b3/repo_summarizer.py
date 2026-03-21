@@ -79,7 +79,7 @@ def _build_chain_gemini():
         raise EnvironmentError("GEMINI_API_KEY not found in .env file")
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-3-flash-preview",
         google_api_key=api_key,
         temperature=0,
     )
