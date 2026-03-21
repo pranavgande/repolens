@@ -1,0 +1,13 @@
+1. This is our problem statement for our hackathon. My initial approach was using Nextjs for frontend, as its easy using premade components and for fast development , Node.js and express/FastAPI for backend server and apis, and for Local LLMs from Huggingface , and for code and repo analysis , my initial thought went towards RAG and Local LLMS, and Langchain for same , fast development and comprenhsive system . Can you elaborate more on my take, and correct me if i am wrong anywhere, and create a comprenhsive architecture , easy to understand and also suggest tech stack changes if needed. This is just a initial architecture, that is to be detailed and changed further according to the development .
+
+2. Currently , well just focus on the adjacency part i.e. the M3 application . What i understood is that the major work doing in this part is traversing the github repo, parse the code and convert raw code which is of a very large size of token to small graphs and condensed formats , for smaller context lengths and fast processing of LLM , right ? Lets walk through the phase by phase implementation of M3 part . Well assume that required inputs , if any are dileverd, or just create some data  for working sake. Give me step by step code implementations along with directory and file structure
+
+3. so we can say m3 only makes an llm call, or does its work and m2 m1 does use its output , so extra computational cost is minimized?
+
+4. cant we do this in langchain, easy as compared to raw python, as langchain is more optimized for api and generative ai / LLM based applications?
+
+5. "so we can say m3 only makes an llm call, or does its work and m2 m1 does use its output, so extra computational cost is minimized
+
+6. can I merge all api points, one call all outputs, this way it will be easy for frontend as only one json load to bifurcate
+
+7. 
