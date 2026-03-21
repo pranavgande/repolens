@@ -10,4 +10,50 @@
 
 6. can I merge all api points, one call all outputs, this way it will be easy for frontend as only one json load to bifurcate
 
-7. 
+7. I have given color theme for the UI that I want. The thing is I will give you project details but you aveto keep this color theme and add dark mode light mode toggle. In dark mode keep grey - orange or black-greyish-orange which looks good The landing page shou have option to enter github repo link and there should be a middle page where there is processing thing and in output there are 3 mandatory outputs and 3 bonus outputs, I will give details of outputs and on landing page there should be only sign in button where integration should be with clerk and for now keep demo data of authentication and keep authentication direct for now I will change it later. Also if I am on landing page and I need to sign in after sign in landing page should come and in another scenario when you are not logged in but you enter link and in that case sign in option should come and after sign in a processing screen and output screen later also this results are fetched from backend apis and for now keep demo data I will change it later Also now I will give you Mandatory and Bonuses
+M1 Folder Structure 
+Analysis 
+Analyze repository folder hierarchy and explain the purpose 
+of each major directory in plain English. 
+M2 Entry Point 
+Detection 
+Auto-detect the project starting point (e.g., server.js, 
+main.py, index.js) and describe the initial execution flow. 
+M3 
+Dependency 
+Mapping 
+Detect file relationships using imports/exports to show how 
+modules interact internally (e.g., route -> controller -> 
+service -> model). 
+ 
+Expected Output — M1: Folder Structure 
+src/ 
+  controllers/  →  Handles incoming requests and business logic 
+  models/       →  Manages database schemas and queries 
+  routes/       →  Defines API endpoints and maps them to controllers 
+  middleware/   →  Preprocesses requests (auth, logging, validation) 
+ 
+Expected Output — M2: Entry Point Detection 
+Entry Point:  server.js 
+ 
+Execution Flow: 
+  server.js loads environment variables 
+  → Connects to MongoDB via db.config.js 
+  → Registers Express middleware 
+  → Mounts API routes from /routes/index.js 
+  → Starts listening on PORT 3000 
+ 
+Expected Output — M3: Dependency Mapping 
+auth.routes.js 
+  └── auth.controller.js 
+        └── user.service.js 
+              └── user.model.js
+B1 — Critical File Identification: Highlight files that play major roles in project execution 
+(auth, DB config, API controllers). 
+• B2 — Execution Flow Explanation: Show runtime request flow for major operations (e.g., 
+Request → Route → Controller → Service → Database). 
+• B3 — Intelligent Repository Summary: Generate a high-level summary including tech 
+stack, architecture style, and key design decisions.
+ keep different tab in output tab for each output.
+
+8. In this theme decrease orange color intensity a little so it doesnt look flashy and make all the input boxes and button a little sharp in rectangular form and in background there is orange color spots that just need a moving gradient .
