@@ -3,79 +3,111 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 from graph.builder import build_dependency_graph
+from graph.analyzer import analyze_graph
+from m1.m1_pipeline import run_m1_pipeline
 from m2.m2_pipeline import run_m2_pipeline
-
-# Import your existing pipeline function — nothing in the pipeline changes
+from m2.entry_detector import detect_entry_point
+from m1.m1_pipeline import run_m1_pipeline
 from main import run_m3_pipeline
-from mock_data.mock_repo import MOCK_REPO_FILES
+from github_fetcher import fetch_repo_files   # ← the new import
 
-app = FastAPI(title="M3 Dependency Analyser")
+app = FastAPI(title="Codebase Intelligence Agent — M1, M2, M3")
 
-# CORS is critical — without this, your Next.js frontend (running on
-# localhost:3000) will be blocked from calling this API (on localhost:8000)
-# because browsers enforce the "same-origin policy" by default.
-# This middleware tells the browser "yes, cross-origin requests are allowed".
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # your Next.js dev server
+    allow_origins=["http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Pydantic model defines the shape of the request body.
-# FastAPI uses this to automatically validate incoming JSON.
 class AnalyseRequest(BaseModel):
-    github_url: str  # e.g. "https://github.com/expressjs/express"
+    github_url: str
 
 
+# ── Health checks ──────────────────────────────────────────────────────────────
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Codebase Intelligence Agent API"}
+
+
+# ── Feature endpoints ──────────────────────────────────────────────────────────
+
+@app.post("/analyse/m1")
+async def analyse_m1(request: AnalyseRequest):
+    """
+    M1 — Folder Structure Analysis.
+    Fetches the real repo, then describes every directory in plain English.
+    """
+    try:
+        # Fetch the real repo — this replaces MOCK_REPO_FILES entirely.
+        # The returned dict has the same shape {filepath: bytes} so nothing
+        # downstream needs to change at all.
+        file_contents = await fetch_repo_files(request.github_url)
+
+        graph       = build_dependency_graph(file_contents)
+        graph_stats = analyze_graph(graph)
+
+        # Detect language from the actual entry point of the fetched repo
+        in_degrees       = dict(graph.in_degree())
+        out_degrees      = dict(graph.out_degree())
+        entry_candidates = [
+            n for n in graph.nodes
+            if in_degrees.get(n, 0) == 0 and out_degrees.get(n, 0) > 0
+        ]
+        detection = detect_entry_point(file_contents, entry_candidates)
+        language  = detection.get("language", "javascript")
+
+        result = run_m1_pipeline(
+            file_contents = file_contents,
+            graph_stats   = graph_stats,
+            language      = language,
+        )
+        return result
+    except ValueError as e:
+        # ValueError means a bad URL or repo not found — that's a 400,
+        # not a 500, because the problem is with the request not the server
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyse/m2")
+async def analyse_m2(request: AnalyseRequest):
+    """
+    M2 — Entry Point Detection and Execution Flow Explanation.
+    Fetches the real repo, detects the entry file, and explains startup flow.
+    """
+    try:
+        file_contents = await fetch_repo_files(request.github_url)
+        graph         = build_dependency_graph(file_contents)
+        result        = run_m2_pipeline(file_contents, graph)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/analyse/m3")
 async def analyse_m3(request: AnalyseRequest):
     """
-    Main endpoint. Receives a GitHub URL, runs the full M3 pipeline,
-    and returns all three outputs the frontend needs:
-      - react_flow_data: nodes and edges for the graph visualisation
-      - llm_context: compressed text ready to send to Claude/Gemini
-      - graph_stats: critical files, entry points, clusters, etc.
-
-    For now we're ignoring request.github_url and using mock data,
-    which is the right approach — get the pipeline working end-to-end
-    over the network first, then swap in real GitHub fetching later.
+    M3 — Dependency Mapping.
+    Fetches the real repo and returns the full dependency graph,
+    React Flow data, LLM context, and graph statistics.
     """
     try:
-        # This is your existing function — completely unchanged.
-        # In a real implementation, you'd fetch file_contents from GitHub
-        # using request.github_url instead of MOCK_REPO_FILES.
-        result = run_m3_pipeline(MOCK_REPO_FILES)
-
-        # FastAPI automatically converts this dict to a JSON HTTP response.
-        # The dict already has exactly what the frontend needs.
+        file_contents = await fetch_repo_files(request.github_url)
+        result        = run_m3_pipeline(file_contents)
         return result
-
-    except Exception as e:
-        # If something goes wrong, return a proper HTTP 500 error
-        # rather than crashing the server silently.
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/health")
-async def health_check():
-    """Simple endpoint to verify the server is running."""
-    return {"status": "ok"}
-
-@app.get("/")
-async def health_check():
-    """Simple endpoint to verify the server is running."""
-    return {"status": "ok"}
-
-@app.post("/analyse/m2")
-async def analyse_m2(request: AnalyseRequest):
-    try:
-        graph  = build_dependency_graph(MOCK_REPO_FILES)
-        result = run_m2_pipeline(MOCK_REPO_FILES, graph)
-        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
