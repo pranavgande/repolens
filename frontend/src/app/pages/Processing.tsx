@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Code2, FolderTree, GitBranch, Zap, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { Code2, FolderTree, GitBranch, Zap, CheckCircle2, Loader2,  } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { useAnalysis } from '../context/AnalysisContext';
 
@@ -23,7 +23,7 @@ export function Processing() {
     let isFetchComplete = false;
     let isAnimationFinished = false;
     let hasRequestError = false;
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const API_BASE_URL = 'http://98.70.40.103:8000';
 
     if (!repoUrl) {
       setError('No repository URL provided.');

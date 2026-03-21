@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router';
 import {
-  ArrowLeft, FolderTree, Zap, GitBranch, Star, TrendingUp, BookOpen, Code2, Shield, Box, Target, Download
+  ArrowLeft, FolderTree, Zap, GitBranch, Star, TrendingUp, BookOpen, Code2, Box, Target, Download
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
