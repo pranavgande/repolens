@@ -9,9 +9,8 @@ from graph.analyzer import analyze_graph
 from m1.m1_pipeline import run_m1_pipeline
 from m2.m2_pipeline import run_m2_pipeline
 from m2.entry_detector import detect_entry_point
-from m1.m1_pipeline import run_m1_pipeline
 from main import run_m3_pipeline
-from github_fetcher import fetch_repo_files   # ← the new import
+from github_fetcher import fetch_repo_files
 
 app = FastAPI(title="Codebase Intelligence Agent — M1, M2, M3")
 
@@ -27,6 +26,113 @@ class AnalyseRequest(BaseModel):
     github_url: str
 
 
+# ── Shared pipeline helper ─────────────────────────────────────────────────────
+
+async def _run_full_pipeline(github_url: str) -> dict:
+    """
+    The core pipeline that all endpoints share.
+
+    This function is the key architectural improvement over having three
+    separate endpoints. Previously, each endpoint independently fetched
+    the repo, parsed all files, and built the graph — three complete
+    repetitions of the most expensive work. Now that work happens exactly
+    once, and all three feature pipelines consume the shared result.
+
+    The execution order is deliberately sequential rather than parallel
+    because each step depends on the previous one:
+      1. Fetch files        — network I/O, must complete before anything else
+      2. Build graph        — CPU work on the fetched files
+      3. Analyse graph      — pure math on the built graph, produces graph_stats
+      4. Detect language    — reads file contents + graph, needed by M1 and M2
+      5. Run M3             — serialises the graph into React Flow + LLM context
+      6. Run M2             — uses graph for entry point, makes one LLM call
+      7. Run M1             — uses graph_stats clusters, may make LLM calls
+
+    M3 runs before M2 and M1 deliberately because it does no LLM work —
+    it's pure serialisation and is essentially free. M2's Gemini call and
+    M1's potential LLM fallback calls happen last, so if anything fails in
+    the expensive LLM layer, the deterministic work is already complete
+    and the error message is meaningful.
+    """
+
+    # ── Step 1: Fetch the repository ──────────────────────────────────────────
+    # fetch_repo_files raises ValueError for bad URLs and repo-not-found cases,
+    # which the endpoint catches and converts to HTTP 400.
+    file_contents = await fetch_repo_files(github_url)
+
+    # ── Step 2: Build the dependency graph ────────────────────────────────────
+    # This is the most computationally expensive step — tree-sitter parses
+    # every supported file, the resolver normalises relative import paths,
+    # and networkx assembles the directed graph. Done once, shared by all.
+    graph = build_dependency_graph(file_contents)
+
+    # ── Step 3: Analyse the graph ─────────────────────────────────────────────
+    # Pure graph mathematics — in-degrees, cycles, clusters, entry candidates.
+    # This produces the graph_stats dict that M1 and M3 both consume.
+    graph_stats = analyze_graph(graph)
+
+    # ── Step 4: Detect language from the entry point ──────────────────────────
+    # M1 needs the language to give the LLM fallback accurate context.
+    # We compute it here from M3's entry candidates so neither M1 nor M2
+    # needs to re-derive it independently.
+    in_degrees       = dict(graph.in_degree())
+    out_degrees      = dict(graph.out_degree())
+    entry_candidates = [
+        n for n in graph.nodes
+        if in_degrees.get(n, 0) == 0 and out_degrees.get(n, 0) > 0
+    ]
+    detection = detect_entry_point(file_contents, entry_candidates)
+    language  = detection.get("language", "javascript")
+
+    # ── Step 5: Run M3 ────────────────────────────────────────────────────────
+    # M3 takes the file_contents and internally rebuilds the graph...
+    # but wait — run_m3_pipeline currently calls build_dependency_graph
+    # internally, which would mean building the graph TWICE. We need to
+    # pass our already-built graph to avoid that. Since main.py's
+    # run_m3_pipeline accepts file_contents and rebuilds internally,
+    # we call the individual M3 components directly instead.
+    from serializer.graph_serializer import to_llm_text, to_react_flow_json
+
+    llm_context     = to_llm_text(graph, graph_stats)
+    react_flow_data = to_react_flow_json(graph, graph_stats)
+
+    m3_result = {
+        "llm_context":     llm_context,
+        "graph_stats":     graph_stats,
+        "react_flow_data": react_flow_data,
+    }
+
+    # ── Step 6: Run M2 ────────────────────────────────────────────────────────
+    # M2 takes the graph we already built and uses it for entry detection
+    # and first-level dependency resolution. One Gemini call happens here.
+    m2_result = run_m2_pipeline(file_contents, graph)
+
+    # ── Step 7: Run M1 ────────────────────────────────────────────────────────
+    # M1 reads graph_stats["clusters"] — already computed in Step 3.
+    # Zero to a few LLM calls happen here depending on folder name familiarity.
+    m1_result = run_m1_pipeline(
+        file_contents = file_contents,
+        graph_stats   = graph_stats,
+        language      = language,
+    )
+
+    # ── Assemble the combined response ────────────────────────────────────────
+    # Nested under feature keys so the frontend can destructure cleanly:
+    # const { m1, m2, m3 } = await response.json()
+    # Each feature's data is exactly what its individual endpoint returned,
+    # so the frontend doesn't need to change how it reads any specific field.
+    return {
+        "repository": {
+            "url":          github_url,
+            "total_files":  graph_stats["total_files"],
+            "language":     language,
+        },
+        "m1": m1_result,
+        "m2": m2_result,
+        "m3": m3_result,
+    }
+
+
 # ── Health checks ──────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -38,42 +144,54 @@ async def root():
     return {"status": "ok", "message": "Codebase Intelligence Agent API"}
 
 
-# ── Feature endpoints ──────────────────────────────────────────────────────────
+# ── Combined endpoint (primary — use this one) ────────────────────────────────
+
+@app.post("/analyse")
+async def analyse_all(request: AnalyseRequest):
+    """
+    Combined endpoint — runs M1, M2, and M3 in a single request.
+
+    This is the primary endpoint the frontend should call. It fetches the
+    repository once, builds the dependency graph once, and runs all three
+    analysis pipelines against the shared result. The response contains
+    everything the frontend needs nested under 'm1', 'm2', and 'm3' keys.
+
+    Response shape:
+    {
+        "repository": { "url", "total_files", "language" },
+        "m1": { "folder_tree", "total_folders", "llm_calls_made", "architecture_hint" },
+        "m2": { "entry_file", "language", "confidence", "first_level_deps", "explanation" },
+        "m3": { "llm_context", "graph_stats", "react_flow_data" }
+    }
+    """
+    try:
+        return await _run_full_pipeline(request.github_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Individual endpoints (kept for debugging and testing) ─────────────────────
+# These remain available so you can test each feature in isolation during
+# development or debug a specific pipeline without running the full stack.
+# In production, the frontend only needs to call /analyse.
 
 @app.post("/analyse/m1")
 async def analyse_m1(request: AnalyseRequest):
-    """
-    M1 — Folder Structure Analysis.
-    Fetches the real repo, then describes every directory in plain English.
-    """
+    """M1 only — for isolated testing."""
     try:
-        # Fetch the real repo — this replaces MOCK_REPO_FILES entirely.
-        # The returned dict has the same shape {filepath: bytes} so nothing
-        # downstream needs to change at all.
         file_contents = await fetch_repo_files(request.github_url)
-
-        graph       = build_dependency_graph(file_contents)
-        graph_stats = analyze_graph(graph)
-
-        # Detect language from the actual entry point of the fetched repo
-        in_degrees       = dict(graph.in_degree())
-        out_degrees      = dict(graph.out_degree())
-        entry_candidates = [
-            n for n in graph.nodes
-            if in_degrees.get(n, 0) == 0 and out_degrees.get(n, 0) > 0
-        ]
-        detection = detect_entry_point(file_contents, entry_candidates)
-        language  = detection.get("language", "javascript")
-
-        result = run_m1_pipeline(
-            file_contents = file_contents,
-            graph_stats   = graph_stats,
-            language      = language,
-        )
-        return result
+        graph         = build_dependency_graph(file_contents)
+        graph_stats   = analyze_graph(graph)
+        in_degrees    = dict(graph.in_degree())
+        out_degrees   = dict(graph.out_degree())
+        candidates    = [n for n in graph.nodes
+                         if in_degrees.get(n,0)==0 and out_degrees.get(n,0)>0]
+        detection     = detect_entry_point(file_contents, candidates)
+        language      = detection.get("language", "javascript")
+        return run_m1_pipeline(file_contents, graph_stats, language)
     except ValueError as e:
-        # ValueError means a bad URL or repo not found — that's a 400,
-        # not a 500, because the problem is with the request not the server
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -81,15 +199,11 @@ async def analyse_m1(request: AnalyseRequest):
 
 @app.post("/analyse/m2")
 async def analyse_m2(request: AnalyseRequest):
-    """
-    M2 — Entry Point Detection and Execution Flow Explanation.
-    Fetches the real repo, detects the entry file, and explains startup flow.
-    """
+    """M2 only — for isolated testing."""
     try:
         file_contents = await fetch_repo_files(request.github_url)
         graph         = build_dependency_graph(file_contents)
-        result        = run_m2_pipeline(file_contents, graph)
-        return result
+        return run_m2_pipeline(file_contents, graph)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -98,15 +212,10 @@ async def analyse_m2(request: AnalyseRequest):
 
 @app.post("/analyse/m3")
 async def analyse_m3(request: AnalyseRequest):
-    """
-    M3 — Dependency Mapping.
-    Fetches the real repo and returns the full dependency graph,
-    React Flow data, LLM context, and graph statistics.
-    """
+    """M3 only — for isolated testing."""
     try:
         file_contents = await fetch_repo_files(request.github_url)
-        result        = run_m3_pipeline(file_contents)
-        return result
+        return run_m3_pipeline(file_contents)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
