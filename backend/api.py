@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import base64
 
 from graph.builder import build_dependency_graph
 from graph.analyzer import analyze_graph
@@ -20,7 +21,7 @@ app = FastAPI(title="Codebase Intelligence Agent — M1, M2, M3")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -136,6 +137,19 @@ async def _run_full_pipeline(github_url: str) -> dict:
     )
     print(f"  Summary: {b3_summary[:80]}...")
 
+    # ── Step 9: Pre-generate PDF Report ───────────────────────────────────────
+    # We generate the PDF synchronously and encode it as a base64 string
+    # right inside the JSON response. This means the frontend receives
+    # the entire analysis AND the downloadable PDF in exactly one API call!
+    pdf_bytes = generate_report(
+        repo_url   = github_url,
+        b3_summary = b3_summary,
+        m1_result  = m1_result,
+        m2_result  = m2_result,
+        m3_result  = m3_result,
+    )
+    pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
     return {
         "repository": {
             "url":          github_url,
@@ -148,6 +162,7 @@ async def _run_full_pipeline(github_url: str) -> dict:
         "m1": m1_result,
         "m2": m2_result,
         "m3": m3_result,
+        "pdf_base64": pdf_b64,
     }
 
 
