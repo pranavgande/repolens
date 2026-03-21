@@ -1,51 +1,108 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Code2, FolderTree, GitBranch, Zap, CheckCircle2, Loader2 } from 'lucide-react';
+import { Code2, FolderTree, GitBranch, Zap, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
+import { useAnalysis } from '../context/AnalysisContext';
 
 const steps = [
-  { icon: FolderTree, label: 'Analyzing folder structure', duration: 1500 },
-  { icon: Code2, label: 'Detecting entry points', duration: 1800 },
-  { icon: GitBranch, label: 'Mapping dependencies', duration: 2000 },
-  { icon: Zap, label: 'Generating insights', duration: 1200 },
+  { icon: FolderTree, label: 'Fetching repository & scanning tree', duration: 1500 },
+  { icon: Code2, label: 'Building dependency graph', duration: 1800 },
+  { icon: GitBranch, label: 'Detecting entry point & mapping files', duration: 2000 },
+  { icon: Zap, label: 'Generating B3 AI summary & PDF', duration: 1200 },
 ];
 
 export function Processing() {
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
   const navigate = useNavigate();
+  const { setAnalysisData, setError, error } = useAnalysis();
 
   useEffect(() => {
-    // Animate progress
+    const repoUrl = sessionStorage.getItem('pendingRepoUrl');
+    let isFetchComplete = false;
+    let isAnimationFinished = false;
+
+    if (!repoUrl) {
+      setError('No repository URL provided.');
+      navigate('/');
+      return;
+    }
+
+    // 1. Kick off the actual API fetch immediately
+    fetch('http://localhost:8000/analyse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ github_url: repoUrl })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to analyze repository (Server Error)');
+        return res.json();
+      })
+      .then(data => {
+        setAnalysisData(data);
+        isFetchComplete = true;
+        checkCompletion();
+      })
+      .catch(err => {
+        setError(err.message);
+        isFetchComplete = true; // Error counts as complete so we stop loader
+      });
+
+    // 2. Run the visual progress bar animation
     const totalDuration = steps.reduce((sum, step) => sum + step.duration, 0);
     let elapsed = 0;
     
     const interval = setInterval(() => {
+      // If error happened, stop animating
+      if (error) {
+        clearInterval(interval);
+        return;
+      }
+
       elapsed += 50;
-      const newProgress = Math.min((elapsed / totalDuration) * 100, 100);
+      
+      // If animation naturally finishes, clamp to 99% until fetch finishes
+      let newProgress = (elapsed / totalDuration) * 100;
+      if (newProgress >= 100 && !isFetchComplete) {
+         newProgress = 99;
+      } else if (newProgress >= 100 && isFetchComplete) {
+         newProgress = 100;
+      }
+
       setProgress(newProgress);
 
-      // Update current step
+      // Update current step safely
       let cumulativeDuration = 0;
       for (let i = 0; i < steps.length; i++) {
         cumulativeDuration += steps[i].duration;
         if (elapsed < cumulativeDuration) {
-          setCurrentStep(i);
+          setCurrentStep(Math.min(i, steps.length - 1));
           break;
         }
       }
 
+      // If both visual and actual fetch are done
       if (elapsed >= totalDuration) {
+        isAnimationFinished = true;
         clearInterval(interval);
+        checkCompletion();
+      }
+    }, 50);
+
+    const checkCompletion = () => {
+      // Only navigate when both the minimal animation duration AND the API fetch are complete
+      if (isAnimationFinished && isFetchComplete) {
+        // If we set an error, the user will see it. Maybe don't navigate, or navigate to results and show error there.
+        // But for now, just navigate to results where we will handle it.
         setTimeout(() => {
           navigate('/results');
         }, 500);
       }
-    }, 50);
+    };
 
     return () => clearInterval(interval);
-  }, [navigate]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/10 flex items-center justify-center p-8 relative overflow-hidden">
