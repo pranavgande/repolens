@@ -22,6 +22,9 @@ app = FastAPI(title="Codebase Intelligence Agent — M1, M2, M3")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    # Temporary: allow any Vercel preview/production domain.
+    # Tighten this to your exact deployed URL after deployment.
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
