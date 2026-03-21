@@ -10,8 +10,7 @@ venv/
 # Environment variables
 .env
 
-# Output / logs
-*.txt
+
 
 # OS files
 .DS_Store
