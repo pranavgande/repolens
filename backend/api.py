@@ -9,8 +9,8 @@ from graph.analyzer import analyze_graph
 from m1.m1_pipeline import run_m1_pipeline
 from m2.m2_pipeline import run_m2_pipeline
 from m2.entry_detector import detect_entry_point
-from main import run_m3_pipeline
-from github_fetcher import fetch_repo_files
+from WINGS_TEAM_KERNEL.backend.main import run_m3_pipeline
+from WINGS_TEAM_KERNEL.backend.github_fetcher import fetch_repo_files
 
 app = FastAPI(title="Codebase Intelligence Agent — M1, M2, M3")
 
