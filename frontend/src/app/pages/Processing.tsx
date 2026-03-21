@@ -16,12 +16,14 @@ export function Processing() {
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
   const navigate = useNavigate();
-  const { setAnalysisData, setError, error } = useAnalysis();
+  const { setAnalysisData, setError } = useAnalysis();
 
   useEffect(() => {
     const repoUrl = sessionStorage.getItem('pendingRepoUrl');
     let isFetchComplete = false;
     let isAnimationFinished = false;
+    let hasRequestError = false;
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
     if (!repoUrl) {
       setError('No repository URL provided.');
@@ -30,7 +32,7 @@ export function Processing() {
     }
 
     // 1. Kick off the actual API fetch immediately
-    fetch('http://localhost:8000/analyse', {
+    fetch(`${API_BASE_URL}/analyse`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ github_url: repoUrl })
@@ -45,8 +47,10 @@ export function Processing() {
         checkCompletion();
       })
       .catch(err => {
-        setError(err.message);
+        hasRequestError = true;
+        setError(err.message || 'Failed to analyze repository.');
         isFetchComplete = true; // Error counts as complete so we stop loader
+        checkCompletion();
       });
 
     // 2. Run the visual progress bar animation
@@ -55,7 +59,7 @@ export function Processing() {
     
     const interval = setInterval(() => {
       // If error happened, stop animating
-      if (error) {
+      if (hasRequestError) {
         clearInterval(interval);
         return;
       }
@@ -93,11 +97,14 @@ export function Processing() {
     const checkCompletion = () => {
       // Only navigate when both the minimal animation duration AND the API fetch are complete
       if (isAnimationFinished && isFetchComplete) {
-        // If we set an error, the user will see it. Maybe don't navigate, or navigate to results and show error there.
-        // But for now, just navigate to results where we will handle it.
-        setTimeout(() => {
-          navigate('/results');
-        }, 500);
+        if (hasRequestError) {
+          sessionStorage.removeItem('pendingRepoUrl');
+          navigate('/');
+          return;
+        }
+
+        setProgress(100);
+        setTimeout(() => navigate('/results'), 500);
       }
     };
 

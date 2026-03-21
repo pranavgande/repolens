@@ -10,7 +10,7 @@ The project is split into two parts:
 ## Project Structure
 
 - `frontend/src/app/` - main UI pages, components, and context
-- `backend/api.py` - backend API entrypoint
+- `backend/main.py` - backend API entrypoint
 - `backend/m1/`, `backend/m2/`, `backend/b3/` - analysis modules
 
 ## Prerequisites
@@ -36,7 +36,7 @@ cd m3_analyzer
 ```bash
 cd backend
 pip install -r requirements.txt
-python api.py
+python main.py
 ```
 
 By default, this should start the API on a local port (for example, `http://localhost:8000`).
@@ -76,7 +76,7 @@ npm run build    # build production assets
 Backend:
 
 ```bash
-uvicorn api:app --reload --port 8000   # run API service
+uvicorn main:app --reload --port 8000   # run API service
 ```
 
 ## Troubleshooting

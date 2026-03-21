@@ -14,9 +14,11 @@ export function Landing() {
   const navigate = useNavigate();
 
   const handleAnalyze = () => {
+    // Always persist the current URL so /processing can read it
+    // regardless of auth state or refresh timing.
+    sessionStorage.setItem('pendingRepoUrl', repoUrl);
+
     if (!isAuthenticated) {
-      // Store the URL and show sign in
-      sessionStorage.setItem('pendingRepoUrl', repoUrl);
       signIn();
       setTimeout(() => {
         navigate('/processing');

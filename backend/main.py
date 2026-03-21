@@ -1,30 +1,43 @@
 # main.py
-
-"""
-M3 Dependency Analysis Pipeline — full end-to-end runner.
-
-Run with:  python main.py
-
-This file serves two purposes simultaneously. When run directly
-(python main.py), it acts as a standalone test runner against the
-mock repository. When imported by api.py, it exposes run_m3_pipeline()
-as a callable function that the FastAPI endpoints use.
-
-The key design change from the original version is that run_m3_pipeline()
-now accepts optional pre-built graph and graph_stats arguments. This
-matters because the combined /analyse endpoint in api.py builds the graph
-once and shares it across M1, M2, and M3. Without this change, M3 would
-rebuild the graph from scratch internally — wasting the work already done.
-With this change, M3 simply uses whatever it receives, and falls back to
-building its own graph only when running in standalone mode.
-"""
+# Single source of truth for the entire backend.
 
 import json
+import base64
 import networkx as nx
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from pydantic import BaseModel
+
 from graph.builder import build_dependency_graph
 from graph.analyzer import analyze_graph
 from serializer.graph_serializer import to_llm_text, to_react_flow_json
+from m1.m1_pipeline import run_m1_pipeline
+from m2.m2_pipeline import run_m2_pipeline
+from m2.entry_detector import detect_entry_point
+from b3.repo_summarizer import generate_summary
+from b3.report_generator import generate_report
+from github_fetcher import fetch_repo_files
 
+app = FastAPI(title="Codebase Intelligence Agent — M1, M2, M3")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ── Request models ─────────────────────────────────────────────────────────────
+
+class AnalyseRequest(BaseModel):
+    github_url: str
+
+
+# ── M3 pipeline ────────────────────────────────────────────────────────────────
 
 def run_m3_pipeline(
     file_contents: dict[str, bytes],
@@ -32,94 +45,53 @@ def run_m3_pipeline(
     graph_stats: dict | None = None,
 ) -> dict:
     """
-    The complete M3 pipeline. Returns a dict with everything the
-    frontend and LLM need — the React Flow graph data, the compressed
-    LLM context string, and the graph statistics.
+    The M3 dependency mapping pipeline.
 
-    Parameters:
-        file_contents: the {filepath: bytes} dict from the GitHub fetcher
-                       or mock data. Always required.
-        graph:         an already-built networkx DiGraph. When provided by
-                       the combined endpoint, M3 skips Phase 1 entirely.
-                       When None (standalone mode), M3 builds it itself.
-        graph_stats:   the already-computed stats dict from analyze_graph().
-                       Same logic — skipped if provided, computed if None.
-
-    The optional parameters exist purely for efficiency in the combined
-    endpoint. The function's output is identical regardless of whether
-    the graph was passed in or built internally — the caller never needs
-    to know which path was taken.
+    Accepts an optional pre-built graph and stats so _run_full_pipeline
+    can pass them in and avoid rebuilding from scratch. When called from
+    the debug /analyse/m3 endpoint without pre-built data, it builds
+    everything itself exactly as it always did.
     """
-
-    # ── Phase 1: Build the dependency graph ───────────────────────────────────
-    # This is the most expensive phase — tree-sitter parses every supported
-    # file, the resolver normalises relative imports, and networkx assembles
-    # the directed graph. We skip it entirely if a pre-built graph was passed
-    # in, which is what the combined /analyse endpoint does.
     print("\n" + "=" * 60)
     print("PHASE 1: Building dependency graph")
     print("=" * 60)
 
     if graph is None:
-        # Standalone mode — build the graph from the raw file contents
         graph = build_dependency_graph(file_contents)
         print(f"\nGraph built: {graph.number_of_nodes()} nodes, "
               f"{graph.number_of_edges()} edges")
     else:
-        # Combined endpoint mode — graph was pre-built upstream, reuse it
         print(f"\nUsing pre-built graph: {graph.number_of_nodes()} nodes, "
               f"{graph.number_of_edges()} edges (skipped rebuild)")
 
-    # ── Phase 2: Analyse the graph ────────────────────────────────────────────
-    # Pure graph mathematics — in-degrees, cycles, clusters, critical files.
-    # Again, skip if the combined endpoint already did this work.
     print("\n" + "=" * 60)
     print("PHASE 2: Analysing graph structure")
     print("=" * 60)
 
     if graph_stats is None:
         graph_stats = analyze_graph(graph)
-        print(f"\nCritical files (by in-degree):")
         for filepath, degree in graph_stats["critical_files"]:
             print(f"  {filepath}  ← imported by {degree} file(s)")
-        print(f"\nEntry point candidates (in-degree = 0):")
         for fp in graph_stats["entry_candidates"]:
-            print(f"  {fp}")
-        if graph_stats["cycles"]:
-            print(f"\nCircular dependencies detected: {len(graph_stats['cycles'])}")
-        else:
-            print(f"\nNo circular dependencies — clean architecture ✓")
+            print(f"  Entry candidate: {fp}")
+        if not graph_stats["cycles"]:
+            print("  No circular dependencies — clean architecture ✓")
     else:
-        print(f"\nUsing pre-computed stats: {graph_stats['total_files']} files, "
-              f"{graph_stats['total_edges']} edges (skipped analysis)")
+        print(f"  Using pre-computed stats ({graph_stats['total_files']} files, "
+              f"{graph_stats['total_edges']} edges)")
 
-    # ── Phase 3: Serialise for the LLM ────────────────────────────────────────
-    # Converts the graph into a compact, human-readable text summary.
-    # A 40,000-line repo becomes roughly 1,000-2,000 characters here —
-    # that's the compression that makes LLM reasoning fast and accurate.
     print("\n" + "=" * 60)
     print("PHASE 3: Serialising for LLM")
     print("=" * 60)
     llm_text = to_llm_text(graph, graph_stats)
     print(llm_text)
 
-    # ── Phase 4: Generate React Flow JSON ─────────────────────────────────────
-    # Converts the graph into the node/edge format that React Flow expects.
-    # Nodes arrive pre-styled (colour-coded by folder, bordered if critical)
-    # so the frontend renders them correctly with zero additional logic.
     print("\n" + "=" * 60)
     print("PHASE 4: Generating React Flow JSON")
     print("=" * 60)
     react_flow_data = to_react_flow_json(graph, graph_stats)
-    print(f"Nodes: {len(react_flow_data['nodes'])}")
-    print(f"Edges: {len(react_flow_data['edges'])}")
-
-    if react_flow_data["nodes"]:
-        print("\nSample node:")
-        print(json.dumps(react_flow_data["nodes"][0], indent=2))
-    if react_flow_data["edges"]:
-        print("\nSample edge:")
-        print(json.dumps(react_flow_data["edges"][0], indent=2))
+    print(f"Nodes: {len(react_flow_data['nodes'])}, "
+          f"Edges: {len(react_flow_data['edges'])}")
 
     return {
         "llm_context":     llm_text,
@@ -128,27 +100,188 @@ def run_m3_pipeline(
     }
 
 
-# ── Standalone runner ─────────────────────────────────────────────────────────
-# This block only executes when you run `python main.py` directly.
-# It is completely ignored when api.py imports run_m3_pipeline as a function.
-# The if __name__ == "__main__" guard is what creates that separation.
+# ── Full pipeline orchestrator ─────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    from mock_data.mock_repo import MOCK_REPO_FILES
+async def _run_full_pipeline(github_url: str) -> dict:
+    """
+    The core pipeline behind the /analyse endpoint.
 
-    print("Running M3 pipeline on mock repository...")
-    print(f"Files in mock repo: {list(MOCK_REPO_FILES.keys())}")
+    Fetches the repository once, builds the dependency graph once, and
+    runs all five outputs (M1, M2, M3, B3 summary, PDF report) against
+    that single shared result. The graph is never rebuilt twice.
 
-    # In standalone mode, no pre-built graph is passed — M3 builds its own.
-    # This is equivalent to what happens when /analyse/m3 is called directly.
-    result = run_m3_pipeline(MOCK_REPO_FILES)
+    Execution order and reasoning:
+      1. Fetch files     — network I/O, everything depends on this
+      2. Build graph     — expensive CPU work, done exactly once
+      3. Analyse graph   — pure maths on the graph, produces graph_stats
+      4. Detect language — reads file contents and graph together
+      5. Run M3          — pure serialisation, no LLM, essentially free
+      6. Run M2          — one Gemini call for the execution flow narrative
+      7. Run M1          — zero to a few LLM calls for folder descriptions
+      8. B3 summary      — one Gemini call synthesising M1 + M2 + M3
+      9. PDF report      — reportlab assembles the report in memory,
+                           encoded as Base64 so it travels in the JSON
+    """
 
+    # Step 1
+    file_contents = await fetch_repo_files(github_url)
+
+    # Step 2
+    graph = build_dependency_graph(file_contents)
+
+    # Step 3
+    graph_stats = analyze_graph(graph)
+
+    # Step 4 — detect language from the entry point so M1 has accurate
+    # context for its LLM fallback without re-deriving it independently
+    in_degrees  = dict(graph.in_degree())
+    out_degrees = dict(graph.out_degree())
+    entry_candidates = [
+        n for n in graph.nodes
+        if in_degrees.get(n, 0) == 0 and out_degrees.get(n, 0) > 0
+    ]
+    detection = detect_entry_point(file_contents, entry_candidates)
+    language  = detection.get("language", "javascript")
+
+    # Step 5 — pass pre-built graph and stats so M3 skips rebuilding
+    m3_result = run_m3_pipeline(file_contents, graph, graph_stats)
+
+    # Step 6
+    m2_result = run_m2_pipeline(file_contents, graph)
+
+    # Step 7
+    m1_result = run_m1_pipeline(
+        file_contents = file_contents,
+        graph_stats   = graph_stats,
+        language      = language,
+    )
+
+    # Step 8
     print("\n" + "=" * 60)
-    print("PIPELINE COMPLETE")
+    print("B3: Generating intelligent repository summary")
     print("=" * 60)
-    print(f"LLM context size    : {len(result['llm_context'])} characters")
-    print(f"React Flow nodes    : {len(result['react_flow_data']['nodes'])}")
-    print(f"React Flow edges    : {len(result['react_flow_data']['edges'])}")
-    print("\nThis output is now ready to be:")
-    print("  1. Sent to Claude/Gemini API for natural language explanation")
-    print("  2. Sent to the Next.js frontend for React Flow visualisation")
+    b3_summary = generate_summary(
+        repo_url  = github_url,
+        m1_result = m1_result,
+        m2_result = m2_result,
+        m3_result = m3_result,
+    )
+    print(f"  Summary generated ({len(b3_summary)} chars)")
+
+    # Step 9 — PDF generated entirely in memory, no disk writes.
+    # Base64 encoding inflates binary by ~33% but for typical repos
+    # (50-150KB PDFs) this adds negligible size to the JSON response.
+    # The frontend decodes it with atob() when the user clicks download.
+    print("\n" + "=" * 60)
+    print("REPORT: Generating PDF")
+    print("=" * 60)
+    pdf_bytes  = generate_report(
+        repo_url   = github_url,
+        b3_summary = b3_summary,
+        m1_result  = m1_result,
+        m2_result  = m2_result,
+        m3_result  = m3_result,
+    )
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+    print(f"  PDF: {len(pdf_bytes):,} bytes → {len(pdf_base64):,} chars as Base64")
+
+    return {
+        "repository": {
+            "url":         github_url,
+            "total_files": graph_stats["total_files"],
+            "language":    language,
+        },
+        "b3":        {"summary": b3_summary},
+        "m1":        m1_result,
+        "m2":        m2_result,
+        "m3":        m3_result,
+        "pdf_base64": pdf_base64,
+    }
+
+
+# ── Health checks ──────────────────────────────────────────────────────────────
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Codebase Intelligence Agent API"}
+
+
+# ── Primary endpoint ───────────────────────────────────────────────────────────
+
+@app.post("/analyse")
+async def analyse_all(request: AnalyseRequest):
+    """
+    The one endpoint the frontend calls for everything.
+
+    Returns M1 folder analysis, M2 execution flow, M3 dependency graph,
+    B3 executive summary, and a Base64-encoded PDF report — all from a
+    single GitHub URL submission.
+
+    Response shape:
+    {
+        "repository":  { url, total_files, language },
+        "b3":          { summary },
+        "m1":          { folder_tree, total_folders, llm_calls_made, architecture_hint },
+        "m2":          { entry_file, language, confidence, first_level_deps, explanation },
+        "m3":          { llm_context, graph_stats, react_flow_data },
+        "pdf_base64":  "...base64 string..."
+    }
+    """
+    try:
+        return await _run_full_pipeline(request.github_url)
+    except ValueError as e:
+        # Bad URL or repo not found — the caller's fault, so 400 not 500
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # Print the full stack trace to the server logs
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Debug endpoints ────────────────────────────────────────────────────────────
+# These exist purely for isolated testing during development.
+# The frontend only ever needs /analyse in production.
+
+@app.post("/analyse/m1")
+async def analyse_m1(request: AnalyseRequest):
+    try:
+        file_contents = await fetch_repo_files(request.github_url)
+        graph         = build_dependency_graph(file_contents)
+        graph_stats   = analyze_graph(graph)
+        in_degrees    = dict(graph.in_degree())
+        out_degrees   = dict(graph.out_degree())
+        candidates    = [n for n in graph.nodes
+                         if in_degrees.get(n,0)==0 and out_degrees.get(n,0)>0]
+        language      = detect_entry_point(file_contents, candidates).get("language", "javascript")
+        return run_m1_pipeline(file_contents, graph_stats, language)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyse/m2")
+async def analyse_m2(request: AnalyseRequest):
+    try:
+        file_contents = await fetch_repo_files(request.github_url)
+        graph         = build_dependency_graph(file_contents)
+        return run_m2_pipeline(file_contents, graph)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyse/m3")
+async def analyse_m3(request: AnalyseRequest):
+    try:
+        file_contents = await fetch_repo_files(request.github_url)
+        return run_m3_pipeline(file_contents)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
