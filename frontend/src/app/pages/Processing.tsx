@@ -23,7 +23,7 @@ export function Processing() {
     let isFetchComplete = false;
     let isAnimationFinished = false;
     let hasRequestError = false;
-    const API_BASE_URL = 'http://98.70.40.103:8000';
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
     if (!repoUrl) {
       setError('No repository URL provided.');
