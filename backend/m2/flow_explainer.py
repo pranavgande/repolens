@@ -152,7 +152,7 @@ Execution Flow:
             user_prompt=user_prompt,
             max_tokens=700,
         )
-    else:
+    elif os.environ.get("GEMINI_API_KEY") or USE_LOCAL_MODEL:
         chain = _build_chain()
         response = chain.invoke({
             "entry_file": entry_file,
@@ -161,6 +161,15 @@ Execution Flow:
             "deps_text": deps_text,
         })
         explanation_text = _clean_content(response.content)
+    else:
+        print("  No external AI key configured — using deterministic M2 fallback")
+        explanation_text = generate_fallback_flow(
+            entry_file=entry_file,
+            language=language,
+            source_code=source_code,
+            deps=first_level_deps,
+        )
+
 
     return {
         "entry_file": entry_file,
