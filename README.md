@@ -91,3 +91,14 @@ Issues and pull requests are welcome. Keep changes focused and document changes 
 ## License
 
 See the repository license file.
+
+
+## Claude configuration
+
+Repolens uses Anthropic's official Python SDK for the B3 executive repository summary.
+
+Set `ANTHROPIC_API_KEY` in the backend environment and optionally set `ANTHROPIC_MODEL` to choose the model. Keep API credentials server-side and never commit them.
+
+Without an Anthropic key, the existing Gemini provider remains available as a development fallback.
+
+The Claude integration uses Anthropic's Messages API.
