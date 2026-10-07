@@ -1,37 +1,61 @@
-# M3 Analyzer
+# Repolens
 
-M3 Analyzer helps inspect and explain code repositories through a web interface and backend analysis services.
+> AI-powered codebase intelligence for understanding unfamiliar repositories faster.
 
-The project is split into two parts:
+Repolens analyzes a repository and turns its structure and important source files into structured technical understanding: architecture, entry points, dependencies, execution flow, and critical files.
 
-- `frontend/` - user interface (React/Vite)
-- `backend/` - API and analysis logic (Python)
+## Why Repolens?
 
-## Project Structure
+Understanding an unfamiliar codebase is often the first bottleneck when joining a project or making a change. Repolens is designed to compress that first-pass investigation into a technical map engineers can use.
 
-- `frontend/src/app/` - main UI pages, components, and context
-- `backend/main.py` - backend API entrypoint
-- `backend/m1/`, `backend/m2/`, `backend/b3/` - analysis modules
+## Current architecture
 
-## Prerequisites
+- `frontend/` — React/Vite user interface
+- `backend/` — Python analysis/API services
+- `backend/m1/`, `backend/m2/`, `backend/b3/` — analysis modules
 
-Install these before running locally:
+## Product workflow
 
-- Node.js (LTS recommended)
-- npm
-- Python 3.10+ (or your project-supported version)
-- pip
-
-## Quick Start
-
-### 1) Clone and open the project
-
-```bash
-git clone
-cd m3_analyzer
+```
+Repository / folder
+       ↓
+Repository analysis
+       ↓
+Structure + important files
+       ↓
+AI-assisted technical analysis
+       ↓
+Architecture / flows / critical files
+       ↓
+Repolens dashboard
 ```
 
-### 2) Start the backend
+## Current status
+
+Repolens is an early-stage developer tool. The repository currently contains the frontend and backend analysis system; the AI-assisted codebase-intelligence layer is being developed as part of the product roadmap.
+
+## Roadmap
+
+- [ ] GitHub repository ingestion
+- [ ] Claude-powered repository analysis
+- [ ] Structured architecture summaries
+- [ ] Entry-point and execution-flow detection
+- [ ] Dependency graph visualization
+- [ ] Critical-file detection
+- [ ] Change-impact analysis
+- [ ] Shared team workspaces
+- [ ] Evaluation benchmarks for codebase understanding
+
+## Local development
+
+### Prerequisites
+
+- Node.js LTS
+- npm
+- Python 3.10+
+- pip
+
+### Backend
 
 ```bash
 cd backend
@@ -39,9 +63,9 @@ pip install -r requirements.txt
 python main.py
 ```
 
-By default, this should start the API on a local port (for example, `http://localhost:8000`).
+### Frontend
 
-### 3) Start the frontend (new terminal)
+In a second terminal:
 
 ```bash
 cd frontend
@@ -49,42 +73,21 @@ npm install
 npm run dev
 ```
 
-Then open the frontend URL shown in terminal (typically `http://localhost:5173`).
+The frontend normally runs on the Vite development URL shown in the terminal.
 
-## How It Works
+## Product positioning
 
-1. You provide repository/folder input in the frontend.
-2. Frontend sends requests to the backend API.
-3. Backend runs analysis modules and returns structured results.
-4. Frontend renders summaries, flow explanations, and visual outputs.
+Repolens is intended for:
 
-## Configuration Notes
-
-- If frontend and backend use different ports, ensure API base URL is set correctly in the frontend configuration.
-- Keep backend dependencies in `backend/requirements.txt`.
-- Keep frontend dependencies in `frontend/package.json`.
-
-## Common Commands
-
-Frontend:
-
-```bash
-npm run dev      # start dev server
-npm run build    # build production assets
-```
-
-Backend:
-
-```bash
-uvicorn main:app --reload --port 8000   # run API service
-```
-
-## Troubleshooting
-
-- If `npm install` fails, verify Node.js and npm versions.
-- If Python packages fail to install, upgrade pip: `python -m pip install --upgrade pip`.
-- If the frontend cannot reach backend, check API URL, ports, and terminal logs.
+- developers joining unfamiliar projects
+- engineering teams onboarding contributors
+- developers working with poorly documented repositories
+- teams that need faster technical orientation before making changes
 
 ## Contributing
 
-Keep changes focused and update this README when setup or behavior changes.
+Issues and pull requests are welcome. Keep changes focused and document changes to setup or product behavior.
+
+## License
+
+See the repository license file.
