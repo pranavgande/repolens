@@ -116,9 +116,9 @@ async def _run_full_pipeline(github_url: str) -> dict:
       3. Analyse graph   — pure maths on the graph, produces graph_stats
       4. Detect language — reads file contents and graph together
       5. Run M3          — pure serialisation, no LLM, essentially free
-      6. Run M2          — one Gemini call for the execution flow narrative
+      6. Run M2          — one Claude call for the execution flow narrative (when configured)
       7. Run M1          — zero to a few LLM calls for folder descriptions
-      8. B3 summary      — one Gemini call synthesising M1 + M2 + M3
+      8. B3 summary      — one Claude call synthesising M1 + M2 + M3 (when configured)
       9. PDF report      — reportlab assembles the report in memory,
                            encoded as Base64 so it travels in the JSON
     """
@@ -207,7 +207,25 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "Codebase Intelligence Agent API"}
+    return {"status": "ok", "message": "Repolens Codebase Intelligence API"}
+
+
+@app.get("/health/ai")
+async def ai_health():
+    """Report the configured AI provider without exposing credentials."""
+    anthropic_configured = bool(__import__("os").environ.get("ANTHROPIC_API_KEY"))
+    if anthropic_configured:
+        provider = "anthropic"
+        model = __import__("os").environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    else:
+        provider = "gemini"
+        model = __import__("os").environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+    return {
+        "provider": provider,
+        "model": model,
+        "configured": True,
+        "fallback_available": provider == "anthropic",
+    }
 
 
 # ── Primary endpoint ───────────────────────────────────────────────────────────
