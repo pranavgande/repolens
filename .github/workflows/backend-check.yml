@@ -16,6 +16,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest
       - run: python -m py_compile $(find . -name "*.py" -not -path "./.venv/*")
-      - run: pytest -q tests/test_ai_fallback.py
+      - run: python tests/smoke_fallback.py
