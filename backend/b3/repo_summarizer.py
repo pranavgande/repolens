@@ -18,6 +18,7 @@ import os
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
+from b3.claude_summarizer import generate_claude_summary
 
 load_dotenv()
 
@@ -163,8 +164,26 @@ def generate_summary(
         else "None — clean architecture"
     )
 
-    print("  Calling Gemini for B3 repository summary...")
+    # Claude is the primary provider. Gemini remains available as a fallback
+    # so development can continue before an Anthropic key is configured.
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        print("  Calling Claude for B3 repository summary...")
+        return generate_claude_summary(
+            repo_url=repo_url,
+            language=m2_result.get("language", "unknown"),
+            total_files=m3_result["graph_stats"].get("total_files", 0),
+            architecture_hint=m1_result.get("architecture_hint", "Unknown"),
+            folder_summary=folder_summary,
+            entry_file=m2_result.get("entry_file", "unknown"),
+            confidence=m2_result.get("confidence", "unknown"),
+            manifest_declared=str(m2_result.get("manifest_declared", False)),
+            execution_flow=m2_result.get("explanation", ""),
+            total_edges=m3_result["graph_stats"].get("total_edges", 0),
+            critical_files=critical_files_text,
+            cycles=cycles_text,
+        )
 
+    print("  ANTHROPIC_API_KEY not configured — falling back to Gemini...")
     response = chain.invoke({
         "repo_url":          repo_url,
         "language":          m2_result.get("language", "unknown"),
