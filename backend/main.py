@@ -216,17 +216,26 @@ async def ai_health():
     """Report the configured AI provider without exposing credentials."""
     anthropic_configured = bool(os.environ.get("ANTHROPIC_API_KEY"))
     gemini_configured = bool(os.environ.get("GEMINI_API_KEY"))
+
     if anthropic_configured:
         provider = "anthropic"
         model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
-    else:
+        external_api = True
+    elif gemini_configured:
         provider = "gemini"
         model = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+        external_api = True
+    else:
+        provider = "deterministic"
+        model = None
+        external_api = False
+
     return {
         "provider": provider,
         "model": model,
-        "configured": anthropic_configured or gemini_configured,
-        "fallback_available": gemini_configured if anthropic_configured else False,
+        "configured": True,
+        "external_api": external_api,
+        "fallback_available": True,
     }
 
 
