@@ -182,8 +182,7 @@ def generate_summary(
             cycles=cycles_text,
         )
 
-    print("  ANTHROPIC_API_KEY not configured — falling back to Gemini...")
-    print("  ANTHROPIC_API_KEY not configured — falling back to Gemini...")
+    print("  ANTHROPIC_API_KEY not configured — falling back to Gemini/local...")
     if os.environ.get("GEMINI_API_KEY") or USE_LOCAL_MODEL:
         print("  Calling Gemini for B3 repository summary...")
         chain = _build_chain()
