@@ -3,6 +3,7 @@
 
 import json
 import base64
+import os
 import networkx as nx
 
 from fastapi import FastAPI, HTTPException
@@ -213,18 +214,19 @@ async def root():
 @app.get("/health/ai")
 async def ai_health():
     """Report the configured AI provider without exposing credentials."""
-    anthropic_configured = bool(__import__("os").environ.get("ANTHROPIC_API_KEY"))
+    anthropic_configured = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    gemini_configured = bool(os.environ.get("GEMINI_API_KEY"))
     if anthropic_configured:
         provider = "anthropic"
-        model = __import__("os").environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+        model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
     else:
         provider = "gemini"
-        model = __import__("os").environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+        model = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
     return {
         "provider": provider,
         "model": model,
-        "configured": True,
-        "fallback_available": provider == "anthropic",
+        "configured": anthropic_configured or gemini_configured,
+        "fallback_available": gemini_configured if anthropic_configured else False,
     }
 
 
