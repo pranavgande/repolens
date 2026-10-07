@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from ai.claude import generate as generate_claude, is_configured as claude_configured
+from ai.fallback import folder_description as generate_fallback_folder
 
 load_dotenv()
 
