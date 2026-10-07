@@ -123,14 +123,18 @@ Describe the folder's role in exactly one sentence. Do not mention specific file
             max_tokens=120,
         ))
 
-    chain = _build_chain()
-    response = chain.invoke({
-        "folder_name": folder_name,
-        "file_list": file_list,
-        "language": language,
-        "architecture_hint": architecture_hint,
-    })
-    return _clean_content(response.content)
+    if os.environ.get("GEMINI_API_KEY") or USE_LOCAL_MODEL:
+        chain = _build_chain()
+        response = chain.invoke({
+            "folder_name": folder_name,
+            "file_list": file_list,
+            "language": language,
+            "architecture_hint": architecture_hint,
+        })
+        return _clean_content(response.content)
+
+    print("  No external AI key configured — using deterministic M1 fallback")
+    return generate_fallback_folder(folder_name, files_inside, language)
 
 
 if __name__ == "__main__":
